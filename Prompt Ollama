@@ -1,0 +1,176 @@
+const data = $input.first().json;
+const r = data.respostas;
+
+//Construir lista formatada de tipos de dados
+const tiposDados = Array.isArray(r.tipos_dados)
+  ? r.tipos_dados.join(',')
+  : r.tipos_dados;
+
+//Construir lista de dados sensíveis
+const dadosSensiveis = Array.isArray(r.dados_sensiveis)
+  ? r.dados_sensiveis.join(',')
+  : r.dados_sensiveis;
+//Determinar o valor de K baseado no tamanho
+let kRecomendado = 5;
+if(r.tamanho_arquivo.includes('Menos de 1.000')){
+  kRecomendado = 7;
+}
+
+//Construir Prompt detalhado
+const systemPrompt = 'Você é um especialista em anonimização de dados e no uso do ARX Anonymization Tool. Sua tarefa é criar guias PRÁTICOS e DETALHADOS para usuários que nunca usaram o ARX antes. Use linguagem SIMPLES e CLARA, com instruções passo-a-passo numeradas.'
+
+const userPrompt = `INFORMAÇÕES DO DATASET
+  Dataset: ${r.dataset_name}
+  Tipos de dados presentes: ${tiposDados}
+  Dados repetidos em todas as linhas: ${r.tem_repetidos}${r.quais_repetidos ? '('+ r.quais_repetidos + ')' : ''}
+  Identificadores únicos: ${dadosSensiveis}
+  Finalidade: ${r.finalidade}
+  Tamanho: ${r.tamanho_arquivo}
+  Preferência: ${r.preferencia}
+  
+  ---
+  
+  CRIE UM GUIA COMPLETO DE ANONIMIZAÇÃO seguindo EXATAMENTE esta estrutura:
+  =========================================================================
+  GUIA DE ANONIMIZAÇÃO - ${r.dataset_name}
+  =========================================================================
+  PARTE 1: PREPARAÇÃO DOS DADOS (ANTES DO ARX)
+  =========================================================================
+  
+  Liste TODAS as colunas mencionadas pelo usuário e para cada uma:
+  * Nome da coluna
+  * Classificação: [REMOVER/ MASCARAR/ GENERALIZAR/ MANTER]
+  * Motivo da decisão
+  * Exemplo de transformação (use dados fictícios)
+  
+  Formato:
+  NOME_COLUNA
+  -> Ação: [ação escolhida]
+  -> Por quê: [explicação simples]
+  -> Exemplo: [antes] -> [depois]
+  
+  PARTE 2: PASSO-A-PASSO NO ARX
+  =========================================================================
+  
+  Dê instruções DETALHADAS e NUMERADAS para cada etapa:
+  
+  1. ABRIR O ARX
+  -onde baixar
+  -como instalar
+  -como abrir o programa
+  
+  2. IMPORTAR OS DADOS
+  -onde clicar
+  -que formato de arquivo usar
+  -que delimitador escolher
+  
+  3. CONFIGURAR CADA COLUNA
+  para cada coluna explique:
+  - onde clicar para configurar
+  - que tipo de atributo escolher:
+  *IDENTIFYING: [quando usar]
+  *QUASI-IDENTIFYING: [quando usar]
+  *SENSITIVE: [quando usar]
+  *INSENSITIVE: [quando usar]
+  
+  4. CRIAR HIERARQUIAS DE GENERALIZAÇÃO
+  para cada coluna QUASI-IDENTIFYING, crie uma hierarquia COMPLETA:
+  
+  Exemplo de formato:
+  
+  Hierarquia para IDADE:
+  nível 0 (original): 25 anos
+  nível 1 (faixa pequena): 20-30 anos
+  nível 2 (faixa média): 20-40 anos
+  nível 3 (faixa grande): 18-60 anos
+  nível 4 (Supressão): *
+  
+  Como criar no ARX:
+  - Clique com o botão direito na coluna
+  -Selecione "Create Hierarchy"
+  - Escolha tipo: [Internal/ Order/ Custom]
+  - Configure níveis conforme acima
+  
+  5. CONFIGURAR PRIVACIDADE
+  - Ir em: Configuration -> Privacy Models
+  - Adicionar K-Anonymity: k = ${kRecomendado}
+  ${dadosSensiveis !== 'Nenhum' ? '-Adicionar L-Diversity: L = 2': ''}
+  - Configurar Suppression Limit: 5%
+  
+  6. EXECUTAR ANONIMIZAÇÃO
+  - Clicar em "Anonymize"
+  - Aguardar processamento
+  - Verificar resultado
+  
+  PARTE 3: HIERARQUIAS ESPECÍFICAS
+  =========================================================================
+  
+  para CADA coluna que precisa de hierarquia, forneça um exemplo COMPLETO:
+  [Criar pelo menos 3 exemplos baseados nos dados do usuário]
+  
+  PARTE 4: CONFIGURAÇÕES DE PRIVACIDADE RECOMENDADAS
+  =========================================================================
+  
+  Baseado na finalidade "${r.finalidade}":
+  
+  K-Anonymity: k = ${kRecomendado}
+  Motivo: [explicar por que este valor]
+  
+  ${dadosSensiveis !== 'Nenhum' ?`L-Diversity: L = 2
+  Motivo: [explicar por que este valor]
+  Aplicar nas colunas: ${dadosSensiveis}` : ''}
+  
+  Suppression Limit: 5%
+  Motivo: [explicar]
+  
+  Outras comfigurações importantes:
+  -[listar outras]
+  
+  PARTE 5: VALIDAÇÃO E VERIFICAÇÃO
+  =========================================================================
+  
+  Após anonimizar, SEMPRE verificar:
+  1. VERIFICAÇÃO VISUAL
+  -[o que verificar]
+  
+  2. MÉTRICAS DO ARX
+  - onde ver as métricas
+  -que valores esperar
+  
+  3. TESTES DE RE-IDENTIFICAÇÃO
+  - como testar
+  - o que é aceitável
+  
+  4. CHECKLIST FINAL
+  [item 1]
+  [item 2]
+  [item 3]
+  
+  PARTE 6: CUIDADOS IMPORTANTES
+  =========================================================================
+  
+  para a finalidade "${r.finalidade}", tenha atenção especial em:
+  * [cuidado 1]
+  * [cuidado 2]
+  * [cuidado 3]
+  
+  ---
+  
+  Gere o guia COMPLETO seguindo EXATAMENTE esta estrutura.
+  Seja DETALHADO e use exemplos PRÁTICOS.
+  Todos os exemplos devem usar dados FICTÍCIOS (nunca dados reais).`;
+
+return [{
+  json:{
+    ...data,
+    prompt:{
+      system: systemPrompt,
+      user: userPrompt
+    },
+    config:{
+      k_recomendado: kRecomendado,
+      usar_I_diversity: dadosSensiveis !== 'Nenhum'
+    }
+  }
+}];
+
