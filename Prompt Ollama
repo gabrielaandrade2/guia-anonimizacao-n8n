@@ -1,176 +1,209 @@
 const data = $input.first().json;
 const r = data.respostas;
 
-//Construir lista formatada de tipos de dados
-const tiposDados = Array.isArray(r.tipos_dados)
-  ? r.tipos_dados.join(',')
-  : r.tipos_dados;
-
-//Construir lista de dados sensíveis
 const dadosSensiveis = Array.isArray(r.dados_sensiveis)
-  ? r.dados_sensiveis.join(',')
+  ? r.dados_sensiveis.join(', ')
   : r.dados_sensiveis;
-//Determinar o valor de K baseado no tamanho
+
 let kRecomendado = 5;
-if(r.tamanho_arquivo.includes('Menos de 1.000')){
+if (r.tamanho_arquivo.includes('Menos de 1.000')) {
+  kRecomendado = 3;
+} else if (r.tamanho_arquivo.includes('Entre 1.000 e 10.000')) {
+  kRecomendado = 5;
+} else if (r.tamanho_arquivo.includes('Entre 10.000 e 100.000')) {
   kRecomendado = 7;
+} else if (r.tamanho_arquivo.includes('Mais de 100.000')) {
+  kRecomendado = 10;
 }
 
-//Construir Prompt detalhado
-const systemPrompt = 'Você é um especialista em anonimização de dados e no uso do ARX Anonymization Tool. Sua tarefa é criar guias PRÁTICOS e DETALHADOS para usuários que nunca usaram o ARX antes. Use linguagem SIMPLES e CLARA, com instruções passo-a-passo numeradas.'
+const systemPrompt = `Você é um especialista em anonimização de dados e no uso do ARX Data Anonymization Tool.
+Sua tarefa é criar guias PRÁTICOS, DETALHADOS e TECNICAMENTE CORRETOS para usuários iniciantes no ARX.
+Use linguagem SIMPLES e CLARA, com instruções passo-a-passo numeradas.
+Responda SEMPRE em português, sem exceções.
+
+REGRAS ABSOLUTAS ? NUNCA VIOLE:
+1. Use SOMENTE as colunas informadas pelo usuário. NUNCA invente, renomeie ou omita colunas.
+2. NUNCA traduza os nomes das colunas. Use SEMPRE os nomes exatos em inglês conforme recebidos.
+3. Para cada coluna, atribua OBRIGATORIAMENTE um tipo ARX: IDENTIFYING, QUASI-IDENTIFYING, SENSITIVE ou INSENSITIVE.
+4. Para cada coluna QUASI-IDENTIFYING, defina OBRIGATORIAMENTE o tipo de transformação ARX: Generalization, Microaggregation ou Masking.
+5. Para cada coluna QUASI-IDENTIFYING com Generalization, forneça a hierarquia COMPLETA com todos os níveis detalhados.
+6. Todos os exemplos devem usar dados FICTÍCIOS - nunca dados reais.
+7. NUNCA use formato de tabela markdown (proibido usar | coluna |).
+8. NUNCA use asteriscos para negrito (**texto**).
+9. Separe cada bloco de coluna com uma linha em branco.
+10. Na PARTE 1, NÃO exiba as regras de formato ? apenas processe as colunas diretamente.
+11. Responda SEMPRE em português.
+
+ATENÇÃO ESPECIAL - TIPOS ARX E SUAS TRANSFORMAÇÕES:
+- IDENTIFYING: coluna que identifica diretamente o indivíduo (ex: CPF, ID). Ação = REMOVER. Transformação = N/A.
+- QUASI-IDENTIFYING: coluna que combinada com outras pode identificar o indivíduo. Ação = GENERALIZAR. Transformação = Generalization ou Microaggregation.
+- SENSITIVE: coluna com dado sensível protegido por l-Diversity. Ação = GENERALIZAR. Transformação = Generalization com hierarquia. NUNCA use Masking em atributos SENSITIVE.
+- INSENSITIVE: coluna sem risco de identificação. Ação = MANTER. Transformação = N/A.
+
+REGRA CRÍTICA SOBRE MASKING:
+- Masking é usado APENAS para atributos IDENTIFYING antes de removê-los.
+- Atributos SENSITIVE NUNCA usam Masking - usam SEMPRE Generalization.
+- O l-Diversity é aplicado sobre o atributo SENSITIVE generalizado.`;
 
 const userPrompt = `INFORMAÇÕES DO DATASET
-  Dataset: ${r.dataset_name}
-  Tipos de dados presentes: ${tiposDados}
-  Dados repetidos em todas as linhas: ${r.tem_repetidos}${r.quais_repetidos ? '('+ r.quais_repetidos + ')' : ''}
-  Identificadores únicos: ${dadosSensiveis}
-  Finalidade: ${r.finalidade}
-  Tamanho: ${r.tamanho_arquivo}
-  Preferência: ${r.preferencia}
-  
-  ---
-  
-  CRIE UM GUIA COMPLETO DE ANONIMIZAÇÃO seguindo EXATAMENTE esta estrutura:
-  =========================================================================
-  GUIA DE ANONIMIZAÇÃO - ${r.dataset_name}
-  =========================================================================
-  PARTE 1: PREPARAÇÃO DOS DADOS (ANTES DO ARX)
-  =========================================================================
-  
-  Liste TODAS as colunas mencionadas pelo usuário e para cada uma:
-  * Nome da coluna
-  * Classificação: [REMOVER/ MASCARAR/ GENERALIZAR/ MANTER]
-  * Motivo da decisão
-  * Exemplo de transformação (use dados fictícios)
-  
-  Formato:
-  NOME_COLUNA
-  -> Ação: [ação escolhida]
-  -> Por quê: [explicação simples]
-  -> Exemplo: [antes] -> [depois]
-  
-  PARTE 2: PASSO-A-PASSO NO ARX
-  =========================================================================
-  
-  Dê instruções DETALHADAS e NUMERADAS para cada etapa:
-  
-  1. ABRIR O ARX
-  -onde baixar
-  -como instalar
-  -como abrir o programa
-  
-  2. IMPORTAR OS DADOS
-  -onde clicar
-  -que formato de arquivo usar
-  -que delimitador escolher
-  
-  3. CONFIGURAR CADA COLUNA
-  para cada coluna explique:
-  - onde clicar para configurar
-  - que tipo de atributo escolher:
-  *IDENTIFYING: [quando usar]
-  *QUASI-IDENTIFYING: [quando usar]
-  *SENSITIVE: [quando usar]
-  *INSENSITIVE: [quando usar]
-  
-  4. CRIAR HIERARQUIAS DE GENERALIZAÇÃO
-  para cada coluna QUASI-IDENTIFYING, crie uma hierarquia COMPLETA:
-  
-  Exemplo de formato:
-  
-  Hierarquia para IDADE:
-  nível 0 (original): 25 anos
-  nível 1 (faixa pequena): 20-30 anos
-  nível 2 (faixa média): 20-40 anos
-  nível 3 (faixa grande): 18-60 anos
-  nível 4 (Supressão): *
-  
-  Como criar no ARX:
-  - Clique com o botão direito na coluna
-  -Selecione "Create Hierarchy"
-  - Escolha tipo: [Internal/ Order/ Custom]
-  - Configure níveis conforme acima
-  
-  5. CONFIGURAR PRIVACIDADE
-  - Ir em: Configuration -> Privacy Models
-  - Adicionar K-Anonymity: k = ${kRecomendado}
-  ${dadosSensiveis !== 'Nenhum' ? '-Adicionar L-Diversity: L = 2': ''}
-  - Configurar Suppression Limit: 5%
-  
-  6. EXECUTAR ANONIMIZAÇÃO
-  - Clicar em "Anonymize"
-  - Aguardar processamento
-  - Verificar resultado
-  
-  PARTE 3: HIERARQUIAS ESPECÍFICAS
-  =========================================================================
-  
-  para CADA coluna que precisa de hierarquia, forneça um exemplo COMPLETO:
-  [Criar pelo menos 3 exemplos baseados nos dados do usuário]
-  
-  PARTE 4: CONFIGURAÇÕES DE PRIVACIDADE RECOMENDADAS
-  =========================================================================
-  
-  Baseado na finalidade "${r.finalidade}":
-  
-  K-Anonymity: k = ${kRecomendado}
-  Motivo: [explicar por que este valor]
-  
-  ${dadosSensiveis !== 'Nenhum' ?`L-Diversity: L = 2
-  Motivo: [explicar por que este valor]
-  Aplicar nas colunas: ${dadosSensiveis}` : ''}
-  
-  Suppression Limit: 5%
-  Motivo: [explicar]
-  
-  Outras comfigurações importantes:
-  -[listar outras]
-  
-  PARTE 5: VALIDAÇÃO E VERIFICAÇÃO
-  =========================================================================
-  
-  Após anonimizar, SEMPRE verificar:
-  1. VERIFICAÇÃO VISUAL
-  -[o que verificar]
-  
-  2. MÉTRICAS DO ARX
-  - onde ver as métricas
-  -que valores esperar
-  
-  3. TESTES DE RE-IDENTIFICAÇÃO
-  - como testar
-  - o que é aceitável
-  
-  4. CHECKLIST FINAL
-  [item 1]
-  [item 2]
-  [item 3]
-  
-  PARTE 6: CUIDADOS IMPORTANTES
-  =========================================================================
-  
-  para a finalidade "${r.finalidade}", tenha atenção especial em:
-  * [cuidado 1]
-  * [cuidado 2]
-  * [cuidado 3]
-  
-  ---
-  
-  Gere o guia COMPLETO seguindo EXATAMENTE esta estrutura.
-  Seja DETALHADO e use exemplos PRÁTICOS.
-  Todos os exemplos devem usar dados FICTÍCIOS (nunca dados reais).`;
+======================
+- Nome do dataset: ${r.dataset_name}
+- Colunas do dataset (USE APENAS ESTAS): ${r.colunas_dataset}
+- Dados repetidos em todas as linhas: ${r.tem_repetidos}${r.quais_repetidos ? ' (' + r.quais_repetidos + ')' : ''}
+- Identificadores únicos: ${r.identificadores_unicos}
+- Dados sensíveis informados pelo usuário: ${dadosSensiveis}
+- Finalidade da anonimização: ${r.finalidade}
+- Tamanho do dataset: ${r.tamanho_arquivo}
+- Preferência de anonimização: ${r.preferencia}
+- Observações adicionais: ${r.observacoes}
+
+==========================================================================
+CRIE O GUIA COMPLETO SEGUINDO EXATAMENTE ESTA ESTRUTURA:
+==========================================================================
+
+PARTE 1: ANÁLISE E CLASSIFICAÇÃO DAS COLUNAS
+==========================================================================
+
+INSTRUÇÃO OBRIGATÓRIA:
+Primeiro, liste as colunas recebidas numeradas:
+1. [coluna 1]
+2. [coluna 2]
+...e assim por diante até a última coluna.
+
+Este será seu ÚNICO referencial. Processe EXATAMENTE este número de colunas,
+na mesma ordem, sem adicionar, renomear ou omitir nenhuma.
+
+Em seguida, processe cada coluna usando EXATAMENTE este formato:
+
+==========================================
+COLUNA: [nome exato conforme listado acima]
+==========================================
+
+-> Ação: [REMOVER / GENERALIZAR / MANTER]
+
+-> Tipo ARX: [IDENTIFYING / QUASI-IDENTIFYING / SENSITIVE / INSENSITIVE]
+
+-> Transformação ARX: [Generalization / Microaggregation / N/A]
+   LEMBRE-SE: SENSITIVE usa Generalization. IDENTIFYING usa N/A. INSENSITIVE usa N/A.
+
+-> Por quê: [explicação simples e direta]
+
+-> Exemplo: [valor original] -> [valor transformado]
+
+-> Hierarquia (preencher APENAS se Transformação ARX = Generalization):
+   Nível 0 (original): [valor real do dataset]
+   Nível 1 (agrupamento): [categoria ou faixa intermediária]
+   Nível 2 (agrupamento maior): [categoria mais ampla, se necessário]
+   Nível N (supressão): *
+
+[repita o bloco acima para cada coluna da lista]
+
+==========================================================================
+PARTE 2: PASSO-A-PASSO NO ARX
+==========================================================================
+
+1. ABRIR O ARX
+   - Onde baixar: http://arx.deidentifier.org/
+   - Como instalar e abrir o programa (ARX.jar)
+
+2. IMPORTAR OS DADOS
+   - Caminho no menu: File -> New Project -> Import Data -> From File
+   - Formato: CSV
+   - Delimitador: vírgula (,)
+   - Marcar "First row contains header"
+
+3. CONFIGURAR CADA COLUNA
+   Para cada coluna do dataset:
+   - Clique com botão direito no cabeçalho da coluna
+   - Selecione "Edit attribute"
+   - Defina o Tipo ARX conforme classificação da PARTE 1
+   Repita individualmente para CADA coluna listada em "${r.colunas_dataset}"
+
+4. CRIAR HIERARQUIAS DE GENERALIZAÇÃO
+   Para cada coluna QUASI-IDENTIFYING ou SENSITIVE com Transformação = Generalization:
+   - Clique com botão direito no cabeçalho da coluna
+   - Selecione "Edit Hierarchy"
+   - Escolha o tipo de hierarquia:
+     Order-based -> para dados numéricos (agrupa por intervalos automaticamente)
+     Custom -> para dados categóricos (você define os grupos manualmente)
+   - Configure os níveis conforme a hierarquia definida na PARTE 1
+
+5. CONFIGURAR MODELOS DE PRIVACIDADE
+   - Acesse a aba "Privacy models" no painel direito
+   - Clique em "+" para adicionar modelos:
+     K-Anonymity: k = ${kRecomendado}
+     ${dadosSensiveis !== 'Nenhum' ? `L-Diversity (Distinct): L = 2, Atributo = ${dadosSensiveis}` : ''}
+   - Em "General settings", defina Suppression Limit = 5%
+
+6. EXECUTAR ANONIMIZAÇÃO
+   - Clique no botão "Anonymize" na barra superior
+   - Aguarde o processamento
+   - Verifique o resultado nas abas "Explore results" e "Analyze risk"
+
+==========================================================================
+PARTE 3: CONFIGURAÇÕES DE PRIVACIDADE RECOMENDADAS
+==========================================================================
+
+Baseado na finalidade "${r.finalidade}" e no tamanho "${r.tamanho_arquivo}":
+
+K-Anonymity: k = ${kRecomendado}
+Motivo: [explicar por que este valor é adequado para este dataset]
+
+${dadosSensiveis !== 'Nenhum' ? `L-Diversity (Distinct): L = 2
+Atributo sensível: ${dadosSensiveis}
+Motivo: [explicar por que l-diversity é necessário aqui]` : ''}
+
+Suppression Limit: 5%
+Motivo: [explicar o que significa e por que 5% é adequado]
+
+==========================================================================
+PARTE 4: VERIFICAÇÃO DO RESULTADO
+==========================================================================
+
+Após executar a anonimização, verifique:
+
+1. VERIFICAÇÃO VISUAL
+   - O que checar na aba "Explore results"
+   - Exemplos de como os dados devem aparecer após anonimização
+
+2. MÉTRICAS NA ABA "Analyze risk"
+   - Prosecutor risk: deve ser baixo (idealmente < 50%)
+   - Journalist risk: referência aceitável
+   - Marketer risk: referência aceitável
+   - Records affected by suppression: deve ser menor ou igual a 5%
+
+3. CHECKLIST FINAL
+   [ ] Todas as colunas IDENTIFYING foram suprimidas
+   [ ] Todas as colunas QUASI-IDENTIFYING foram generalizadas
+   [ ] Atributos SENSITIVE foram generalizados com hierarquia
+   [ ] k-Anonymity = ${kRecomendado} satisfeito
+   ${dadosSensiveis !== 'Nenhum' ? `[ ] L-Diversity = 2 satisfeito para ${dadosSensiveis}` : ''}
+   [ ] Suppression menor ou igual a 5%
+   [ ] Dados ainda são úteis para a finalidade: ${r.finalidade}
+
+==========================================================================
+PARTE 5: CUIDADOS IMPORTANTES
+==========================================================================
+
+Para a finalidade "${r.finalidade}", atenção especial em:
+- [cuidado específico 1 relacionado à finalidade]
+- [cuidado específico 2 relacionado ao tipo de dado]
+- [cuidado específico 3 relacionado ao risco de re-identificação]
+
+---
+Gere o guia COMPLETO seguindo EXATAMENTE esta estrutura.
+Seja DETALHADO, TÉCNICO e use apenas exemplos com dados FICTÍCIOS.`;
 
 return [{
-  json:{
+  json: {
     ...data,
-    prompt:{
+    prompt: {
       system: systemPrompt,
       user: userPrompt
     },
-    config:{
+    config: {
       k_recomendado: kRecomendado,
-      usar_I_diversity: dadosSensiveis !== 'Nenhum'
+      usar_l_diversity: dadosSensiveis !== 'Nenhum'
     }
   }
 }];
-
